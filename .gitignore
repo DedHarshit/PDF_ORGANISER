@@ -1,0 +1,7 @@
+*.pdf
+*.jpg
+*.jpeg
+*.png
+__pycache__/
+.env
+rag_env/
