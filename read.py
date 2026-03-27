@@ -6,7 +6,7 @@ import os
 load_dotenv() 
 # STAGE - 1 EXTRACTION
 
-reader = PdfReader("GENERAL-STUDIES-PAPER-IV-QP-CSM-25-010925.pdf")
+reader = PdfReader("1773859921123.pdf")
 page = reader.pages[0]
 text = page.extract_text()
 
@@ -31,21 +31,37 @@ client = OpenAI(
     api_key=token,
 )
 
-response = client.chat.completions.create(
-    messages=[
-        {
-            "role": "system",
-            "content": "You are a helpful assistant.",
-        },
-        {
-            "role": "user",
-            "content": "What is the capital of France?",
-        }
-    ],
-    temperature=1.0,
-    top_p=1.0,
-    max_tokens=1000,
-    model=model_name
+
+if text and text.strip():
+    response = client.chat.completions.create(
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a help full assistant whos job is to find the correct sorted path/folder for the pdf based on the given text in format of a\b\c",
+            },
+            {
+                "role": "user",
+                "content": f"{text}",
+            }
+        ],
+        temperature=1.0,
+        top_p=1.0,
+        max_tokens=1000,
+        model=model_name
+)
+    
+else:
+    response = client.chat.completions.create(
+       input=[{
+        "role": "user",
+        "content": [
+            {"type": "input_text", "text": "You are a help full assistant whos job is to find the correct sorted path/folder for the pdf based on the given text in format of a\b\c"},
+            {
+                "type": "input_image",
+                "image_url": "https://api.nga.gov/iiif/a2e6da57-3cd1-4235-b20e-95dcaefed6c8/full/!800,800/0/default.jpg",
+            },
+        ],
+    }],
 )
 
 print(response.choices[0].message.content)
