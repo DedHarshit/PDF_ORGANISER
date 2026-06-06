@@ -58,7 +58,7 @@ class PDFHandler(FileSystemEventHandler):
     # ── Core processing ───────────────────────────────────────────────────────
 
     def _handle(self, pdf_path: str):
-        logger.info("▶  New PDF detected: %s", Path(pdf_path).name)
+        logger.info("New PDF detected: %s", Path(pdf_path).name)
 
         # Wait for the file to finish being written
         if not self._wait_for_file(pdf_path):
@@ -131,7 +131,7 @@ def start_watching(watch_dir: str, output_dir: str) -> None:
         output_dir: Root directory where organised PDFs are placed.
     """
     logger.info("=" * 60)
-    logger.info("PDF Organiser started")
+    logger.info("   PDF Organiser started")
     logger.info("  Watch dir  :  %s", watch_dir)
     logger.info("  Output dir :  %s", output_dir)
     logger.info("=" * 60)

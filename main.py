@@ -29,7 +29,7 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
-    format="%(asctime)s  [%(levelname)-8s]  %(name)s — %(message)s",
+    format="%(asctime)s  [%(levelname)-8s]  %(name)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[
         logging.StreamHandler(),
@@ -58,7 +58,6 @@ if __name__ == "__main__":
     watch_dir  = os.getenv("WATCH_DIR",  "./inbox")
     output_dir = os.getenv("OUTPUT_DIR", "./organised")
 
-    # Bootstrap directories so the user doesn't have to create them manually
     Path(watch_dir).mkdir(parents=True, exist_ok=True)
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
