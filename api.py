@@ -60,3 +60,41 @@ def save_config(cfg: dict):
         set_key(str(ENV_FILE), "OUTPUT_DIR", cfg["output_dir"])
     if cfg.get("log_level"):
         set_key(str(ENV_FILE), "LOG_LEVEL", cfg["log_level"])
+
+# ── Routes ─────────────────────────────────────────────────────────────────────
+
+@app.route("/")
+def index():
+    return jsonify({"status": "ok"})
+
+@app.route("/config", methods=["GET"])
+def get_config():
+    return jsonify(load_config())
+
+@app.route("/config", methods=["POST"])
+def update_config():
+    cfg = load_config()
+    cfg.update(request.json)
+    save_config(cfg)
+    return jsonify({"status": "saved"})
+
+@app.route("/files", methods=["GET"])
+def get_files():
+    cfg = load_config()
+    output_dir = Path(cfg["output_dir"])
+    files = []
+    for f in output_dir.rglob("*.pdf"):
+        files.append({
+            "name": f.name,
+            "folder": f.parent.name,
+            "path": str(f)
+        })
+    return jsonify({"files": files})
+
+@app.route("/watcher/status", methods=["GET"])
+def watcher_status():
+    return jsonify({"active": _watcher_active})
+
+# ── Entry point ────────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    app.run(debug=True, port=5000)
