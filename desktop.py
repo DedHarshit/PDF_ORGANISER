@@ -1,3 +1,19 @@
+"""
+desktop.py
+----------
+Native desktop launcher for PDF Organiser.
+Run with:  python desktop.py
+
+- Opens a desktop window (pywebview + Flask)
+- Closing the window sends it to the system tray
+- Tray icon: right-click to Open, or Quit
+- Tray notifications when watcher sorts a new PDF
+- Flask + watcher keep running in background when window is hidden
+
+Requirements:
+    pip install pywebview flask flask-cors python-dotenv pystray pillow
+"""
+
 import threading
 import time
 import sys
@@ -116,6 +132,64 @@ def start_tray():
         pass
     except Exception as e:
         print(f"Tray error: {e}")
+
+
+# ── Background watcher event listener ─────────────────────────────────────────
+# Polls /api/watcher/events and sends tray notifications for sorted files.
+
+def start_watcher_notifier():
+    """Long-running thread: listens to /api/watcher/events SSE and notifies."""
+    while not _app_quitting:
+        try:
+            req = urllib.request.Request('http://127.0.0.1:5000/api/watcher/events')
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                for raw_line in resp:
+                    if _app_quitting:
+                        break
+                    line = raw_line.decode('utf-8').strip()
+                    if not line.startswith('data:'):
+                        continue
+                    try:
+                        evt = json.loads(line[5:].strip())
+                        if evt.get('type') == 'file':
+                            if evt.get('status') == 'ok':
+                                notify('PDF Sorted',
+                                       f"{evt['file']} -> {evt.get('dest', '?')}")
+                            else:
+                                notify('PDF Error', evt.get('msg', 'Unknown error'))
+                        elif evt.get('type') == 'stopped':
+                            break
+                    except Exception:
+                        pass
+        except Exception:
+            time.sleep(5)   # retry after connection drop
+
+
+notifier_thread = threading.Thread(target=start_watcher_notifier, daemon=True)
+notifier_thread.start()
+
+
+# ── pywebview JS API ───────────────────────────────────────────────────────────
+
+INJECT_JS = """
+async function nativePickFolder(which) {
+    const path = await window.pywebview.api.pick_folder();
+    if (!path) return;
+    setFolderPath(which, path);
+    const manualEl = document.getElementById(which + 'Manual');
+    if (manualEl) manualEl.value = path;
+    checkStep1();
+    saveFolderToApi(which, path);
+}
+window.pickFolder = function(which) { nativePickFolder(which); };
+"""
+
+class JsAPI:
+    def pick_folder(self):
+        result = webview.windows[0].create_file_dialog(webview.FOLDER_DIALOG)
+        if result and len(result) > 0:
+            return result[0].replace('\\\\', '/')
+        return ''
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
