@@ -1,19 +1,3 @@
-"""
-desktop.py
-----------
-Native desktop launcher for PDF Organiser.
-Run with:  python desktop.py
-
-- Opens a desktop window (pywebview + Flask)
-- Closing the window sends it to the system tray
-- Tray icon: right-click to Open, or Quit
-- Tray notifications when watcher sorts a new PDF
-- Flask + watcher keep running in background when window is hidden
-
-Requirements:
-    pip install pywebview flask flask-cors python-dotenv pystray pillow
-"""
-
 import threading
 import time
 import sys
