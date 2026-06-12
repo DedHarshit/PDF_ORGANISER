@@ -1,3 +1,9 @@
+"""
+desktop.py
+----------
+Native desktop launcher for PDF Organiser.
+"""
+
 import threading
 import time
 import sys

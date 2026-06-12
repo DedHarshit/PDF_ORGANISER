@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-TOKEN        = os.environ["GITHUB_TOKEN"]
 ENDPOINT     = "https://models.github.ai/inference"
 MODEL_NAME   = "openai/gpt-4o"
 MAX_PAGES    = 3        # Pages to scan for text before giving up
@@ -43,7 +42,13 @@ SYSTEM_PROMPT = (
     "Return ONLY the folder path. No explanation, no punctuation."
 )
 
-client = OpenAI(base_url=ENDPOINT, api_key=TOKEN)
+def _get_client() -> OpenAI:
+    """Create OpenAI client with the current token (read fresh each time so .env changes are picked up)."""
+    load_dotenv(override=True)
+    token = os.environ.get("GITHUB_TOKEN", "")
+    if not token:
+        raise RuntimeError("GITHUB_TOKEN is not set. Add it in the Settings tab or .env file.")
+    return OpenAI(base_url=ENDPOINT, api_key=token)
 
 
 # ── Text & Image Extraction ───────────────────────────────────────────────────
@@ -134,6 +139,7 @@ def _call_api(messages: list[dict], retries: int = API_RETRIES) -> str:
     Raises:
         RuntimeError — after all retries exhausted, or on non-retryable API error
     """
+    client = _get_client()
     for attempt in range(retries):
         try:
             response = client.chat.completions.create(

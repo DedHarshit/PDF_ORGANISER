@@ -1,3 +1,9 @@
+"""
+api.py
+------
+Flask REST backend for the PDF Organiser GUI.
+"""
+
 import os
 import json
 import logging

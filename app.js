@@ -88,17 +88,122 @@ function markTokenStep() {
 }
 
 // ── Watcher toggle ─────────────────────────────────────────────────────
+let _watcherES = null;
+
 async function toggleWatcher(on) {
   try {
-    const ep = on ? '/watcher/start' : '/watcher/stop';
-    const r  = await fetch(API + ep, { method: 'POST' });
-    const d  = await r.json();
-    if (d.error) { toast(d.error, 'err'); return; }
-    updateWatcherBadge(on);
-    toast(d.message, 'ok');
-  } catch {
+    if (on) {
+      // 1. Save current config (token + folders) before starting
+      const token = document.getElementById('tokenInput').value.trim();
+      const src   = document.getElementById('srcManual').value.trim();
+      const dst   = document.getElementById('dstManual').value.trim();
+      if (!src || !dst)   { toast('Set source and destination folders first', 'err'); document.getElementById('autoWatcher').checked = false; return; }
+      if (!token)         { toast('Enter your GitHub token first', 'err');            document.getElementById('autoWatcher').checked = false; return; }
+      await fetch(API + '/config', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ watch_dir: src, output_dir: dst, github_token: token })
+      });
+
+      // 2. Start sweep (process existing files) — stream its progress into console
+      log('Watcher: sweeping existing files first…', 'log-ok');
+      await new Promise(resolve => {
+        const sweepES = new EventSource(API + '/watcher/sweep');
+        sweepES.onmessage = e => {
+          const d = JSON.parse(e.data);
+          if (d.type === 'start')    { log(`Watcher sweep: ${d.total} file(s) found.`); }
+          if (d.type === 'progress') { log(d.msg, d.status === 'ok' ? 'log-ok' : 'log-err'); updateTableRow(d); updateStats(d); }
+          if (d.type === 'done')     { sweepES.close(); log(`Watcher sweep done — ${d.sorted} sorted, ${d.errors} errors.`, 'log-ok'); resolve(); }
+          if (d.type === 'error')    { sweepES.close(); log(d.message || 'Sweep error', 'log-err'); resolve(); }
+        };
+        sweepES.onerror = () => { sweepES.close(); resolve(); };
+      });
+
+      // 3. Start background observer for NEW files
+      const r = await fetch(API + '/watcher/start', { method: 'POST' });
+      const d = await r.json();
+      if (d.error) { toast(d.error, 'err'); document.getElementById('autoWatcher').checked = false; return; }
+      updateWatcherBadge(true);
+      toast('Watcher active — monitoring for new PDFs', 'ok');
+      log('Watcher started. Drop PDFs into source folder to auto-sort them.', 'log-ok');
+
+      // 4. Open SSE stream for live events from the observer
+      if (_watcherES) _watcherES.close();
+      _watcherES = new EventSource(API + '/watcher/events');
+      _watcherES.onmessage = e => {
+        const d = JSON.parse(e.data);
+        if (d.type === 'file') {
+          log(d.msg, d.status === 'ok' ? 'log-ok' : 'log-err');
+          toast(d.status === 'ok' ? `Sorted: ${d.file}` : `Error: ${d.file}`, d.status === 'ok' ? 'ok' : 'err');
+          // Add new row to table or update existing
+          const existing = document.getElementById('badge-' + d.file);
+          if (!existing) {
+            const body = document.getElementById('fileTableBody');
+            const wrap = document.getElementById('fileTableWrap');
+            wrap.style.display = 'block';
+            const row = document.createElement('tr');
+            row.id = 'row-' + d.file;
+            row.innerHTML = `
+              <td class="file-name">${escHtml(d.file)}</td>
+              <td class="file-size">—</td>
+              <td id="dest-${escHtml(d.file)}" style="color:var(--muted);font-family:var(--font-mono);font-size:12px">${escHtml(d.dest || '—')}</td>
+              <td><span class="file-status-badge ${d.status === 'ok' ? 'badge-ok' : 'badge-error'}" id="badge-${escHtml(d.file)}">${d.status === 'ok' ? 'Done' : 'Error'}</span></td>`;
+            body.prepend(row);
+          } else {
+            updateTableRow(d);
+          }
+          // Bump stats
+          const sorted = (parseInt(document.getElementById('statSorted').textContent) || 0) + (d.status === 'ok' ? 1 : 0);
+          const errors = (parseInt(document.getElementById('statErrors').textContent) || 0) + (d.status !== 'ok' ? 1 : 0);
+          const total  = (parseInt(document.getElementById('statTotal').textContent)  || 0) + 1;
+          document.getElementById('statSorted').textContent = sorted;
+          document.getElementById('statErrors').textContent = errors;
+          document.getElementById('statTotal').textContent  = total;
+        }
+        if (d.type === 'stopped') {
+          _watcherES.close(); _watcherES = null;
+          updateWatcherBadge(false);
+          document.getElementById('autoWatcher').checked = false;
+          log('Watcher stopped.', 'log-warn');
+        }
+      };
+      _watcherES.onerror = () => {
+        // Don't close on transient errors — SSE will auto-reconnect
+      };
+
+    } else {
+      // Stop watcher
+      if (_watcherES) { _watcherES.close(); _watcherES = null; }
+      const r = await fetch(API + '/watcher/stop', { method: 'POST' });
+      const d = await r.json();
+      updateWatcherBadge(false);
+      toast(d.message, 'ok');
+      log('Watcher stopped.', 'log-warn');
+    }
+  } catch(err) {
     toast('API not reachable — is api.py running?', 'err');
+    document.getElementById('autoWatcher').checked = false;
   }
+}
+
+// Helper: update a file table row after processing
+function updateTableRow(d) {
+  const badge = document.getElementById('badge-' + d.file);
+  const dest  = document.getElementById('dest-'  + d.file);
+  if (badge) {
+    badge.className  = 'file-status-badge ' + (d.status === 'ok' ? 'badge-ok' : 'badge-error');
+    badge.textContent = d.status === 'ok' ? 'Done' : 'Error';
+  }
+  if (dest && d.dest) dest.textContent = d.dest;
+}
+
+// Helper: update stats counters during sweep
+function updateStats(d) {
+  const sorted = parseInt(document.getElementById('statSorted').textContent) || 0;
+  const errors = parseInt(document.getElementById('statErrors').textContent) || 0;
+  if (d.status === 'ok') document.getElementById('statSorted').textContent = sorted + 1;
+  else                   document.getElementById('statErrors').textContent = errors + 1;
+  document.getElementById('statPending').textContent = Math.max(0,
+    (parseInt(document.getElementById('statTotal').textContent) || 0) - d.index);
 }
 function updateWatcherBadge(active) {
   const badge = document.getElementById('watcherBadge');
