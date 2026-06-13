@@ -33,8 +33,33 @@ _watcher_thread: threading.Thread | None = None
 _watcher_stop   = threading.Event()
 _watcher_active = False
 _run_lock       = threading.Lock()
-# Queue for live watcher events (new files dropped after sweep)
-_watcher_event_queue: queue.Queue = queue.Queue()
+
+# Broadcast queue: each SSE subscriber gets its own Queue so reconnects
+# never lose events and multiple tabs stay in sync.
+_watcher_subscribers: list[queue.Queue] = []
+_watcher_subscribers_lock = threading.Lock()
+
+
+def _broadcast(evt: dict):
+    """Push an event to every active /api/watcher/events subscriber."""
+    with _watcher_subscribers_lock:
+        for q in _watcher_subscribers:
+            q.put(evt)
+
+
+def _subscribe() -> queue.Queue:
+    q: queue.Queue = queue.Queue()
+    with _watcher_subscribers_lock:
+        _watcher_subscribers.append(q)
+    return q
+
+
+def _unsubscribe(q: queue.Queue):
+    with _watcher_subscribers_lock:
+        try:
+            _watcher_subscribers.remove(q)
+        except ValueError:
+            pass
 
 # ── Config helpers ─────────────────────────────────────────────────────────────
 DEFAULT_CONFIG = {
@@ -212,7 +237,7 @@ def watcher_start():
                         organise_pdf(event.src_path, cfg["output_dir"], folder)
                         msg = f"Moved -> {folder}/{pdf_name}"
                         logger.info("Watcher: %s", msg)
-                        _watcher_event_queue.put({"type": "file", "file": pdf_name, "dest": folder, "msg": msg, "status": "ok"})
+                        _broadcast({"type": "file", "file": pdf_name, "dest": folder, "msg": msg, "status": "ok"})
                     except Exception as exc:
                         msg = f"Error on {pdf_name}: {exc}"
                         logger.error("Watcher: %s", msg)
@@ -220,7 +245,7 @@ def watcher_start():
                             move_to_error(event.src_path, cfg["output_dir"], "watcher_error")
                         except Exception:
                             pass
-                        _watcher_event_queue.put({"type": "file", "file": pdf_name, "dest": "", "msg": msg, "status": "error"})
+                        _broadcast({"type": "file", "file": pdf_name, "dest": "", "msg": msg, "status": "error"})
 
             observer = _obs.Observer()
             observer.schedule(_Handler(), cfg["watch_dir"], recursive=False)
@@ -231,7 +256,7 @@ def watcher_start():
             observer.join()
         finally:
             _watcher_active = False
-            _watcher_event_queue.put({"type": "stopped"})
+            _broadcast({"type": "stopped"})
 
     _watcher_thread = threading.Thread(target=run, daemon=True)
     _watcher_thread.start()
@@ -311,17 +336,25 @@ def watcher_sweep():
 def watcher_events():
     """
     SSE: streams events for files processed by the background watcher AFTER sweep.
-    The frontend opens this after the sweep completes to get live updates.
+    Each caller gets its own queue (broadcast pattern) so reconnects never lose events.
+    An immediate 'connected' event is sent so the frontend knows the stream is live.
     """
     def event_stream():
-        while True:
-            try:
-                evt = _watcher_event_queue.get(timeout=30)
-                yield f"data: {json.dumps(evt)}\n\n"
-                if evt.get("type") == "stopped":
-                    break
-            except queue.Empty:
-                yield f"data: {json.dumps({'type':'heartbeat'})}\n\n"
+        q = _subscribe()
+        try:
+            # Let the frontend know the SSE pipe is open immediately
+            yield f"data: {json.dumps({'type': 'connected'})}\n\n"
+            while True:
+                try:
+                    evt = q.get(timeout=25)
+                    yield f"data: {json.dumps(evt)}\n\n"
+                    if evt.get("type") == "stopped":
+                        break
+                except queue.Empty:
+                    # Keepalive ping — prevents proxies/browsers from closing the stream
+                    yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
+        finally:
+            _unsubscribe(q)
 
     return Response(event_stream(), mimetype="text/event-stream",
                     headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"})

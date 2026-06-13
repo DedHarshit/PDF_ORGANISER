@@ -131,6 +131,11 @@ async function toggleWatcher(on) {
       _watcherES = new EventSource(API + '/watcher/events');
       _watcherES.onmessage = e => {
         const d = JSON.parse(e.data);
+        if (d.type === 'connected') {
+          log('Watcher event stream connected — drop PDFs into source folder to auto-sort.', 'log-ok');
+          return;
+        }
+        if (d.type === 'heartbeat') return; // silent keepalive
         if (d.type === 'file') {
           log(d.msg, d.status === 'ok' ? 'log-ok' : 'log-err');
           toast(d.status === 'ok' ? `Sorted: ${d.file}` : `Error: ${d.file}`, d.status === 'ok' ? 'ok' : 'err');
@@ -167,7 +172,8 @@ async function toggleWatcher(on) {
         }
       };
       _watcherES.onerror = () => {
-        // Don't close on transient errors — SSE will auto-reconnect
+        // SSE will auto-reconnect; log it so the user can see transient drops
+        log('Watcher stream reconnecting…', 'log-warn');
       };
 
     } else {

@@ -42,13 +42,31 @@ SYSTEM_PROMPT = (
     "Return ONLY the folder path. No explanation, no punctuation."
 )
 
+# ── Client cache — reuse across PDFs, only rebuild when token changes ─────────
+_client_cache: OpenAI | None = None
+_client_token: str = ""
+
 def _get_client() -> OpenAI:
-    """Create OpenAI client with the current token (read fresh each time so .env changes are picked up)."""
-    load_dotenv(override=True)
+    """Return a cached OpenAI client. Rebuilds only when the token in env changes.
+
+    Calling load_dotenv + constructing OpenAI() on every PDF was the primary
+    performance bottleneck for batch runs. Now we pay that cost at most once
+    per token rotation.
+    """
+    global _client_cache, _client_token
+    # Read token from env (already loaded at module import; api.py sets it via os.environ)
     token = os.environ.get("GITHUB_TOKEN", "")
     if not token:
+        # Last-ditch: try re-reading .env in case it was written after import
+        load_dotenv(override=True)
+        token = os.environ.get("GITHUB_TOKEN", "")
+    if not token:
         raise RuntimeError("GITHUB_TOKEN is not set. Add it in the Settings tab or .env file.")
-    return OpenAI(base_url=ENDPOINT, api_key=token)
+    if token != _client_token or _client_cache is None:
+        _client_cache = OpenAI(base_url=ENDPOINT, api_key=token)
+        _client_token = token
+        logger.debug("OpenAI client (re)created for updated token.")
+    return _client_cache
 
 
 # ── Text & Image Extraction ───────────────────────────────────────────────────
@@ -79,6 +97,7 @@ def extract_content(pdf_path: str) -> tuple[str | None, list[str]]:
     temp_images: list[str] = []
 
     try:
+        # PdfReader buffers the whole file — open once and reuse within this call
         reader = PdfReader(pdf_path)
     except PdfReadError as exc:
         raise PDFExtractionError(f"Corrupted or invalid PDF: {pdf_path}") from exc
