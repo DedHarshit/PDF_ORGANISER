@@ -5,8 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>PDF Organiser</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="style.css" />
+<script>
+  // Applied before first paint to avoid a flash of the wrong theme.
+  // Kept in sync with the THEME_KEY constant in app.js.
+  try {
+    if (localStorage.getItem('pdfOrganiser.theme') !== 'light') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); /* localStorage unavailable — default to dark */ }
+</script>
 </head>
 <body>
 <div class="layout">
@@ -14,29 +24,33 @@
 <!-- ── NAV ──────────────────────────────────────────────────────────── -->
 <nav>
   <a class="logo" href="#">
-    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-      <rect width="28" height="28" rx="7" fill="#e84545" fill-opacity="0.15"/>
-      <path d="M8 7h8l5 5v9a1 1 0 01-1 1H8a1 1 0 01-1-1V8a1 1 0 011-1z" stroke="#e84545" stroke-width="1.5" fill="none"/>
-      <path d="M16 7v5h5" stroke="#e84545" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-      <path d="M10 14h8M10 17h5" stroke="#e84545" stroke-width="1.5" stroke-linecap="round"/>
+    <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+      <rect x="1" y="1" width="24" height="24" rx="2" style="fill:var(--card);stroke:var(--wax)" stroke-width="1.3"/>
+      <path d="M7 6.5h9l3.2 3.2V19a0.7 0.7 0 01-0.7 0.7H7.7A0.7 0.7 0 017 19V6.5z" style="stroke:var(--wax)" stroke-width="1.3" fill="none"/>
+      <path d="M16 6.5v3.2h3.2" style="stroke:var(--wax)" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+      <path d="M9.3 13.2h6.4M9.3 15.6h4" style="stroke:var(--wax)" stroke-width="1.2" stroke-linecap="round"/>
     </svg>
     PDF<span>Organiser</span>
   </a>
 
-  <div class="nav-tabs">
-    <button class="nav-tab active" onclick="switchTab('organise')">Organise</button>
-    <button class="nav-tab" onclick="switchTab('settings')">Settings</button>
-    <button class="nav-tab" onclick="switchTab('logs')">Logs</button>
+  <div class="nav-tabs" role="tablist" aria-label="Sections">
+    <button class="nav-tab active" role="tab" aria-selected="true" onclick="switchTab('organise')">Organise</button>
+    <button class="nav-tab" role="tab" aria-selected="false" onclick="switchTab('settings')">Settings</button>
+    <button class="nav-tab" role="tab" aria-selected="false" onclick="switchTab('logs')">Logs</button>
   </div>
 
   <div class="nav-right">
     <div class="watcher-badge" id="watcherBadge">
-      <span class="watcher-dot"></span>
+      <span class="watcher-dot" aria-hidden="true"></span>
       <span id="watcherLabel">Watcher off</span>
     </div>
+    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" type="button" aria-label="Toggle dark mode">
+      <svg class="icon-sun" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="3.2"/><path d="M8 1.3v1.6M8 13.1v1.6M2.6 8H1M15 8h-1.6M3.8 3.8l1.1 1.1M11.1 11.1l1.1 1.1M3.8 12.2l1.1-1.1M11.1 4.9l1.1-1.1" stroke-linecap="round"/></svg>
+      <svg class="icon-moon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M13.5 9.3A5.8 5.8 0 016.7 2.5a5.8 5.8 0 106.8 6.8z"/></svg>
+    </button>
     <button class="btn btn-primary" id="runBtn" onclick="startRun()">
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M3 2l9 5-9 5V2z"/></svg>
-      Run Now
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="currentColor" aria-hidden="true"><path d="M3 2l9 5-9 5V2z"/></svg>
+      <span class="btn-label">Run Now</span>
     </button>
   </div>
 </nav>
@@ -45,89 +59,103 @@
 <main>
 
   <!-- ╔══════ ORGANISE TAB ══════╗ -->
-  <div class="tab-panel active" id="tab-organise">
+  <div class="tab-panel active" id="tab-organise" role="tabpanel">
 
     <h2 class="section-title">Organise PDFs</h2>
-    <p class="section-sub">Configure your folders, set your token, then hit Run Now.</p>
+    <p class="section-sub">Set your folders and token below, then run the sort.</p>
 
     <div class="steps">
 
       <!-- Step 1 — Folders -->
       <div class="step-card" id="step1" style="grid-column:1/-1">
-        <div class="step-num" data-n="1"></div>
-        <div class="step-label">Step 1</div>
-        <div class="step-title">Choose Folders</div>
+        <div class="step-tab"><span class="step-tab-check" data-check></span><span data-label>Step 1 · Folders</span></div>
+        <div class="step-title">Choose source &amp; destination</div>
 
         <div class="folder-row">
           <!-- Source folder -->
           <div class="folder-box">
-            <div class="folder-box-label">📥 Source (inbox)</div>
-            <div class="folder-path empty" id="srcPath">Click to select folder…</div>
-            <button class="folder-btn" onclick="pickFolder('src')">
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 3.5h11v7a1 1 0 01-1 1H2a1 1 0 01-1-1v-7z"/><path d="M1 3.5l1.5-2h3.5l1.5 2"/></svg>
-              Browse
-            </button>
-            <input type="file" id="srcInput" class="hidden-input" webkitdirectory />
+            <div class="folder-box-label">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1 3.2h10v6.3a.6.6 0 01-.6.6H1.6a.6.6 0 01-.6-.6V3.2z"/><path d="M1 3.2l1.3-1.8h3.2l1.3 1.8"/></svg>
+              Source (inbox)
+            </div>
+            <div class="folder-path-row">
+              <div class="folder-path empty" id="srcPath" title="">Click Browse to select…</div>
+              <button class="folder-btn" onclick="pickFolder('src')" type="button">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M1 3.5h10v6.5a1 1 0 01-1 1H2a1 1 0 01-1-1v-6.5z"/><path d="M1 3.5l1.4-2h3.2l1.4 2"/></svg>
+                Browse
+              </button>
+            </div>
+            <input type="file" id="srcInput" class="hidden-input" webkitdirectory aria-label="Select source folder" />
           </div>
 
-          <div class="arrow-icon">→</div>
+          <div class="arrow-icon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 8h12M9 3l5 5-5 5"/></svg>
+          </div>
 
           <!-- Dest folder -->
           <div class="folder-box">
-            <div class="folder-box-label">📁 Destination</div>
-            <div class="folder-path empty" id="dstPath">Click to select folder…</div>
-            <button class="folder-btn" onclick="pickFolder('dst')">
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 3.5h11v7a1 1 0 01-1 1H2a1 1 0 01-1-1v-7z"/><path d="M1 3.5l1.5-2h3.5l1.5 2"/></svg>
-              Browse
-            </button>
-            <input type="file" id="dstInput" class="hidden-input" webkitdirectory />
+            <div class="folder-box-label">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1 3.2h10v6.3a.6.6 0 01-.6.6H1.6a.6.6 0 01-.6-.6V3.2z"/><path d="M1 3.2l1.3-1.8h3.2l1.3 1.8"/></svg>
+              Destination
+            </div>
+            <div class="folder-path-row">
+              <div class="folder-path empty" id="dstPath" title="">Click Browse to select…</div>
+              <button class="folder-btn" onclick="pickFolder('dst')" type="button">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M1 3.5h10v6.5a1 1 0 01-1 1H2a1 1 0 01-1-1v-6.5z"/><path d="M1 3.5l1.4-2h3.2l1.4 2"/></svg>
+                Browse
+              </button>
+            </div>
+            <input type="file" id="dstInput" class="hidden-input" webkitdirectory aria-label="Select destination folder" />
           </div>
         </div>
 
         <!-- Manual path inputs (fallback) -->
-        <div style="margin-top:16px; display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-          <div class="form-row" style="margin:0">
-            <label class="form-label">Or type source path</label>
-            <input class="form-input" id="srcManual" placeholder="e.g. C:\Users\Harshit\inbox" oninput="updatePathFromManual('src')" />
+        <div class="manual-paths">
+          <div class="form-row">
+            <label class="form-label" for="srcManual">Or type source path</label>
+            <input class="form-input" id="srcManual" placeholder="C:\Users\Harshit\inbox" oninput="updatePathFromManual('src')" />
           </div>
-          <div class="form-row" style="margin:0">
-            <label class="form-label">Or type dest path</label>
-            <input class="form-input" id="dstManual" placeholder="e.g. C:\Users\Harshit\Documents" oninput="updatePathFromManual('dst')" />
+          <div class="form-row">
+            <label class="form-label" for="dstManual">Or type destination path</label>
+            <input class="form-input" id="dstManual" placeholder="C:\Users\Harshit\Documents" oninput="updatePathFromManual('dst')" />
           </div>
         </div>
       </div>
 
       <!-- Step 2 — Token -->
       <div class="step-card" id="step2">
-        <div class="step-num" data-n="2"></div>
-        <div class="step-label">Step 2</div>
-        <div class="step-title">GitHub API Token</div>
+        <div class="step-tab"><span class="step-tab-check" data-check></span><span data-label>Step 2 · Token</span></div>
+        <div class="step-title">GitHub API token</div>
         <div class="token-wrap">
-          <input class="token-input" type="password" id="tokenInput" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" oninput="markTokenStep()" />
-          <button class="token-eye" onclick="toggleTokenVis()">
-            <svg id="eyeIcon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>
+          <input class="token-input" type="password" id="tokenInput" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" oninput="markTokenStep()" autocomplete="off" />
+          <button class="token-eye" onclick="toggleTokenVis()" type="button" aria-label="Show or hide token">
+            <svg id="eyeIcon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>
           </button>
         </div>
-        <p class="token-hint">Stored locally in <code>.env</code>. <a href="https://github.com/settings/tokens" target="_blank">Generate a token →</a></p>
+        <div class="token-format" id="tokenFormat" aria-live="polite"></div>
+        <p class="token-hint">Stored locally in <code>.env</code> — never sent anywhere else. <a href="https://github.com/settings/tokens" target="_blank" rel="noopener">Generate a token →</a></p>
+        <div class="token-status" id="tokenStatus">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><circle cx="6.5" cy="6.5" r="5.3"/><path d="M4.3 6.7l1.6 1.6 3-3.4"/></svg>
+          <span>Used for GitHub Marketplace model access (GPT-4o)</span>
+        </div>
       </div>
 
       <!-- Step 3 — Options -->
       <div class="step-card" id="step3">
-        <div class="step-num" data-n="3"></div>
-        <div class="step-label">Step 3</div>
-        <div class="step-title">Options</div>
+        <div class="step-tab"><span class="step-tab-check" data-check></span><span data-label>Step 3 · Options</span></div>
+        <div class="step-title">Behaviour</div>
 
         <div class="options-grid">
           <div class="opt-group">
-            <span class="opt-label">File Action</span>
-            <select class="opt-select" id="fileAction">
+            <label class="opt-label" for="fileAction">File action</label>
+            <select class="opt-select" id="fileAction" onchange="markStep3()">
               <option value="move">Move files</option>
               <option value="copy">Copy files</option>
               <option value="dry_run">Dry run (preview)</option>
             </select>
           </div>
           <div class="opt-group">
-            <span class="opt-label">Log Level</span>
+            <label class="opt-label" for="logLevel">Log level</label>
             <select class="opt-select" id="logLevel">
               <option value="INFO">INFO</option>
               <option value="DEBUG">DEBUG</option>
@@ -136,27 +164,27 @@
           </div>
         </div>
 
-        <div style="display:flex; flex-direction:column; gap:10px; margin-top:14px;">
+        <div class="toggle-stack">
           <label class="toggle-row">
-            <div>
-              <div class="toggle-row-label">Auto Watcher</div>
-              <div class="toggle-row-sub">Watch folder continuously for new PDFs</div>
+            <div class="toggle-row-text">
+              <div class="toggle-row-label">Auto watcher</div>
+              <div class="toggle-row-sub">Watch the source folder continuously</div>
             </div>
-            <label class="toggle"><input type="checkbox" id="autoWatcher" onchange="toggleWatcher(this.checked)"><span class="toggle-slider"></span></label>
+            <span class="toggle"><input type="checkbox" id="autoWatcher" onchange="toggleWatcher(this.checked)"><span class="toggle-slider"></span></span>
           </label>
           <label class="toggle-row">
-            <div>
-              <div class="toggle-row-label">Skip Duplicates</div>
-              <div class="toggle-row-sub">Don't move files that already exist at destination</div>
+            <div class="toggle-row-text">
+              <div class="toggle-row-label">Skip duplicates</div>
+              <div class="toggle-row-sub">Don't move files that already exist at the destination</div>
             </div>
-            <label class="toggle"><input type="checkbox" id="skipDupes" checked><span class="toggle-slider"></span></label>
+            <span class="toggle"><input type="checkbox" id="skipDupes" checked><span class="toggle-slider"></span></span>
           </label>
           <label class="toggle-row">
-            <div>
-              <div class="toggle-row-label">Auto-create Subfolders</div>
+            <div class="toggle-row-text">
+              <div class="toggle-row-label">Auto-create subfolders</div>
               <div class="toggle-row-sub">Create destination directories automatically</div>
             </div>
-            <label class="toggle"><input type="checkbox" id="autoMkdir" checked><span class="toggle-slider"></span></label>
+            <span class="toggle"><input type="checkbox" id="autoMkdir" checked><span class="toggle-slider"></span></span>
           </label>
         </div>
       </div>
@@ -171,10 +199,13 @@
         <div class="stat"><div class="stat-val yellow" id="statPending">—</div><div class="stat-lbl">Pending</div></div>
         <div class="stat"><div class="stat-val red" id="statErrors">—</div><div class="stat-lbl">Errors</div></div>
       </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        <button class="btn btn-ghost btn-sm" onclick="scanFiles()">↻ Scan</button>
-        <button class="btn btn-primary btn-sm" id="runBtn2" onclick="startRun()">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><path d="M2 1.5l8 4.5-8 4.5V1.5z"/></svg>
+      <div class="run-actions">
+        <button class="btn btn-ghost btn-sm" onclick="scanFiles()" type="button">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M10.5 6a4.5 4.5 0 11-1.3-3.2M10.5 1.5v3h-3"/></svg>
+          Scan
+        </button>
+        <button class="btn btn-primary btn-sm" id="runBtn2" onclick="startRun()" type="button">
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true"><path d="M2 1.5l8 4.5-8 4.5V1.5z"/></svg>
           Run
         </button>
       </div>
@@ -191,20 +222,22 @@
 
     <!-- File table -->
     <div class="file-table-wrap" id="fileTableWrap" style="display:none">
-      <table class="file-table">
-        <thead><tr><th>File</th><th>Size</th><th>Destination</th><th>Status</th></tr></thead>
-        <tbody id="fileTableBody"></tbody>
-      </table>
+      <div class="file-table-scroll">
+        <table class="file-table">
+          <thead><tr><th>File</th><th>Size</th><th>Destination</th><th>Status</th></tr></thead>
+          <tbody id="fileTableBody"></tbody>
+        </table>
+      </div>
     </div>
 
     <!-- Console -->
     <div class="console-wrap">
       <div class="console-header">
-        <span class="console-title"><span class="console-dot"></span> Activity Log</span>
-        <button class="btn btn-ghost btn-sm" onclick="clearConsole()">Clear</button>
+        <span class="console-title"><span class="console-dot" aria-hidden="true"></span> Activity log</span>
+        <button class="btn btn-ghost btn-sm" onclick="clearConsole()" type="button">Clear</button>
       </div>
       <div class="console-body" id="console">
-        <span class="log-dim">Ready. Configure your folders and click Run Now.</span>
+        <div><span class="log-dim">Ready. Choose your folders above, then run the sort.</span></div>
       </div>
     </div>
 
@@ -212,41 +245,50 @@
 
 
   <!-- ╔══════ SETTINGS TAB ══════╗ -->
-  <div class="tab-panel" id="tab-settings">
+  <div class="tab-panel" id="tab-settings" role="tabpanel">
     <h2 class="section-title">Settings</h2>
-    <p class="section-sub">Configure paths, token, and behaviour. Changes are saved to <code>.gui_config.json</code> and <code>.env</code>.</p>
+    <p class="section-sub">Saved to <code>.gui_config.json</code> and <code>.env</code> on this machine.</p>
 
     <div class="settings-grid">
       <div class="settings-card">
-        <h3>📂 Directories</h3>
+        <h3>
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M1 3.5h11v7.2a.8.8 0 01-.8.8H1.8a.8.8 0 01-.8-.8V3.5z"/><path d="M1 3.5l1.5-2h3.5l1.5 2"/></svg>
+          Directories
+        </h3>
         <div class="form-row">
-          <label class="form-label">Source (Watch) Directory</label>
+          <label class="form-label" for="cfgSrc">Source (watch) directory</label>
           <input class="form-input" id="cfgSrc" placeholder="./inbox" />
         </div>
         <div class="form-row">
-          <label class="form-label">Destination Directory</label>
+          <label class="form-label" for="cfgDst">Destination directory</label>
           <input class="form-input" id="cfgDst" placeholder="./organised" />
         </div>
       </div>
 
       <div class="settings-card">
-        <h3>🔑 Authentication</h3>
+        <h3>
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="5" cy="5" r="3.2"/><path d="M7.3 7.3L12 12M9.5 9.5l1.2-1.2"/></svg>
+          Authentication
+        </h3>
         <div class="form-row">
-          <label class="form-label">GitHub API Token</label>
+          <label class="form-label" for="cfgToken">GitHub API token</label>
           <div class="token-wrap">
-            <input class="token-input form-input" type="password" id="cfgToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" style="padding-right:44px" />
-            <button class="token-eye" onclick="toggleCfgTokenVis()">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>
+            <input class="token-input form-input" type="password" id="cfgToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" style="padding-right:42px" autocomplete="off" />
+            <button class="token-eye" onclick="toggleCfgTokenVis()" type="button" aria-label="Show or hide token">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>
             </button>
           </div>
-          <p class="token-hint"><a href="https://github.com/settings/tokens" target="_blank">Generate token on GitHub →</a></p>
+          <p class="token-hint"><a href="https://github.com/settings/tokens" target="_blank" rel="noopener">Generate a token on GitHub →</a></p>
         </div>
       </div>
 
       <div class="settings-card">
-        <h3>⚙️ Behaviour</h3>
+        <h3>
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="6.5" cy="6.5" r="2"/><path d="M6.5 1v1.6M6.5 10.4V12M1 6.5h1.6M10.4 6.5H12M2.8 2.8l1.1 1.1M9 9l1.1 1.1M2.8 10.2l1.1-1.1M9 4l1.1-1.1"/></svg>
+          Behaviour
+        </h3>
         <div class="form-row">
-          <label class="form-label">File Action</label>
+          <label class="form-label" for="cfgAction">File action</label>
           <select class="opt-select" id="cfgAction">
             <option value="move">Move files</option>
             <option value="copy">Copy files</option>
@@ -254,7 +296,7 @@
           </select>
         </div>
         <div class="form-row">
-          <label class="form-label">Log Level</label>
+          <label class="form-label" for="cfgLogLevel">Log level</label>
           <select class="opt-select" id="cfgLogLevel">
             <option value="INFO">INFO</option>
             <option value="DEBUG">DEBUG</option>
@@ -264,39 +306,52 @@
       </div>
 
       <div class="settings-card">
-        <h3>🔄 Watcher</h3>
-        <div style="display:flex;flex-direction:column;gap:10px;">
+        <h3>
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M11.5 6.5a5 5 0 11-1.5-3.6M11.5 1.5v3.4h-3.4"/></svg>
+          Watcher
+        </h3>
+        <div class="toggle-stack" style="margin-top:0">
           <label class="toggle-row">
-            <div>
-              <div class="toggle-row-label">Auto Watcher</div>
-              <div class="toggle-row-sub">Monitor folder continuously</div>
+            <div class="toggle-row-text">
+              <div class="toggle-row-label">Auto watcher</div>
+              <div class="toggle-row-sub">Monitor the folder continuously</div>
             </div>
-            <label class="toggle"><input type="checkbox" id="cfgAutoWatcher"><span class="toggle-slider"></span></label>
+            <span class="toggle"><input type="checkbox" id="cfgAutoWatcher"><span class="toggle-slider"></span></span>
           </label>
           <label class="toggle-row">
-            <div>
-              <div class="toggle-row-label">Skip Duplicates</div>
-              <div class="toggle-row-sub">Skip files already at destination</div>
+            <div class="toggle-row-text">
+              <div class="toggle-row-label">Skip duplicates</div>
+              <div class="toggle-row-sub">Skip files already at the destination</div>
             </div>
-            <label class="toggle"><input type="checkbox" id="cfgSkipDupes" checked><span class="toggle-slider"></span></label>
+            <span class="toggle"><input type="checkbox" id="cfgSkipDupes" checked><span class="toggle-slider"></span></span>
+          </label>
+          <label class="toggle-row">
+            <div class="toggle-row-text">
+              <div class="toggle-row-label">Auto-create subfolders</div>
+              <div class="toggle-row-sub">Create destination directories automatically</div>
+            </div>
+            <span class="toggle"><input type="checkbox" id="cfgAutoMkdir" checked><span class="toggle-slider"></span></span>
           </label>
         </div>
       </div>
     </div>
 
     <div class="save-row">
-      <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+      <button class="btn btn-primary" onclick="saveSettings()" type="button">Save settings</button>
     </div>
   </div><!-- /tab-settings -->
 
 
   <!-- ╔══════ LOGS TAB ══════╗ -->
-  <div class="tab-panel" id="tab-logs">
-    <h2 class="section-title">Log File</h2>
-    <p class="section-sub" style="margin-bottom:16px">Live tail of <code>pdf_organiser.log</code></p>
-    <div style="display:flex;gap:10px;margin-bottom:16px">
-      <button class="btn btn-ghost btn-sm" onclick="fetchLog()">↻ Refresh</button>
-      <button class="btn btn-ghost btn-sm" onclick="toggleAutoRefresh()"><span id="autoRefreshLabel">▶ Auto-refresh</span></button>
+  <div class="tab-panel" id="tab-logs" role="tabpanel">
+    <h2 class="section-title">Log file</h2>
+    <p class="section-sub">Live tail of <code>pdf_organiser.log</code>.</p>
+    <div class="log-toolbar">
+      <button class="btn btn-ghost btn-sm" onclick="fetchLog()" type="button">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M10.5 6a4.5 4.5 0 11-1.3-3.2M10.5 1.5v3h-3"/></svg>
+        Refresh
+      </button>
+      <button class="btn btn-ghost btn-sm" onclick="toggleAutoRefresh()" type="button"><span id="autoRefreshLabel">▶ Auto-refresh</span></button>
     </div>
     <div class="log-full" id="logFull">Fetching log…</div>
   </div>
@@ -304,7 +359,7 @@
 </main>
 </div><!-- /layout -->
 
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 <script src="app.js"></script>
 </body>
 </html>

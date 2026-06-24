@@ -1,6 +1,45 @@
 // ── API base ───────────────────────────────────────────────────────────
 const API = 'http://localhost:5000/api';
 
+// ── Theme (dark mode) ───────────────────────────────────────────────────
+// Preference is client-only (localStorage), independent of the backend's
+// .gui_config.json — it's a display setting, not an organiser setting.
+const THEME_KEY = 'pdfOrganiser.theme';
+
+function applyTheme(theme) {
+  if (theme === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+  }
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
+}
+
+function getStoredTheme() {
+  try {
+    return localStorage.getItem(THEME_KEY);
+  } catch {
+    return null; // localStorage unavailable (privacy mode, etc.) — fall back to light
+  }
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  const next = current === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  try {
+    localStorage.setItem(THEME_KEY, next);
+  } catch {
+    // Storage blocked — theme still applies for this session, just won't persist.
+  }
+}
+
+// Apply the saved preference as early as possible (before other init work)
+// so there's no flash of the wrong theme on load. Default is dark; users
+// who explicitly choose light get that remembered via localStorage.
+applyTheme(getStoredTheme() === 'light' ? 'light' : 'dark');
+
 // ── Tab switching ──────────────────────────────────────────────────────
 function switchTab(name) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -59,7 +98,7 @@ function updatePathFromManual(which) {
   const val = document.getElementById(which + 'Manual').value.trim();
   const el  = document.getElementById(which + 'Path');
   if (val) { el.textContent = val; el.classList.remove('empty'); }
-  else     { el.textContent = 'Click to select folder…'; el.classList.add('empty'); }
+  else     { el.textContent = 'Click Browse to select…'; el.classList.add('empty'); }
   checkStep1();
   if (val) saveFolderToApi(which, val);
 }
@@ -85,6 +124,36 @@ function toggleCfgTokenVis() {
 function markTokenStep() {
   const val = document.getElementById('tokenInput').value.trim();
   document.getElementById('step2').classList.toggle('complete', val.length > 10);
+  updateTokenFormatHint(val);
+  saveTokenToApi(val);
+}
+// Debounced so we don't fire a request on every keystroke — same persistence
+// behaviour Step 1's folder fields already have, applied consistently here.
+let _tokenSaveTimer = null;
+function saveTokenToApi(token) {
+  clearTimeout(_tokenSaveTimer);
+  if (!token) return;
+  _tokenSaveTimer = setTimeout(() => {
+    fetch(API + '/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ github_token: token }) }).catch(()=>{});
+  }, 600);
+}
+// Step 3 (Behaviour) always has valid defaults the moment the page loads,
+// so it's marked complete on init and whenever its controls change —
+// matching the same visual treatment Steps 1 and 2 get.
+function markStep3() {
+  document.getElementById('step3').classList.add('complete');
+}
+function updateTokenFormatHint(val) {
+  const el = document.getElementById('tokenFormat');
+  if (!val) { el.textContent = ''; el.className = 'token-format'; return; }
+  const looksValid = /^(ghp_|github_pat_|gho_)/.test(val) && val.length >= 20;
+  if (looksValid) {
+    el.className = 'token-format valid';
+    el.innerHTML = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="6" cy="6" r="5"/><path d="M3.8 6.2l1.5 1.5 2.7-3"/></svg>Looks like a valid GitHub token format';
+  } else {
+    el.className = 'token-format invalid';
+    el.innerHTML = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M6 1l5 9.5H1L6 1z"/><path d="M6 4.8v2.4M6 8.6v.4"/></svg>Doesn\'t match a known GitHub token prefix (ghp_, github_pat_, gho_)';
+  }
 }
 
 // ── Watcher toggle ─────────────────────────────────────────────────────
@@ -142,15 +211,24 @@ async function toggleWatcher(on) {
           // Add new row to table or update existing
           const existing = document.getElementById('badge-' + d.file);
           if (!existing) {
-            const body = document.getElementById('fileTableBody');
             const wrap = document.getElementById('fileTableWrap');
+            if (!document.getElementById('fileTableBody')) {
+              wrap.innerHTML = `
+                <div class="file-table-scroll">
+                  <table class="file-table">
+                    <thead><tr><th>File</th><th>Size</th><th>Destination</th><th>Status</th></tr></thead>
+                    <tbody id="fileTableBody"></tbody>
+                  </table>
+                </div>`;
+            }
             wrap.style.display = 'block';
+            const body = document.getElementById('fileTableBody');
             const row = document.createElement('tr');
             row.id = 'row-' + d.file;
             row.innerHTML = `
-              <td class="file-name">${escHtml(d.file)}</td>
+              <td class="file-name" title="${escHtml(d.file)}">${escHtml(d.file)}</td>
               <td class="file-size">—</td>
-              <td id="dest-${escHtml(d.file)}" style="color:var(--muted);font-family:var(--font-mono);font-size:12px">${escHtml(d.dest || '—')}</td>
+              <td class="file-dest" id="dest-${escHtml(d.file)}" title="${escHtml(d.dest || '')}">${escHtml(d.dest || '—')}</td>
               <td><span class="file-status-badge ${d.status === 'ok' ? 'badge-ok' : 'badge-error'}" id="badge-${escHtml(d.file)}">${d.status === 'ok' ? 'Done' : 'Error'}</span></td>`;
             body.prepend(row);
           } else {
@@ -199,7 +277,10 @@ function updateTableRow(d) {
     badge.className  = 'file-status-badge ' + (d.status === 'ok' ? 'badge-ok' : 'badge-error');
     badge.textContent = d.status === 'ok' ? 'Done' : 'Error';
   }
-  if (dest && d.dest) dest.textContent = d.dest;
+  if (dest && d.dest) {
+    dest.textContent = d.dest;
+    dest.title = d.dest; // keep tooltip in sync with truncated text
+  }
 }
 
 // Helper: update stats counters during sweep
@@ -241,13 +322,32 @@ async function scanFiles() {
 function renderFileTable(files) {
   const wrap = document.getElementById('fileTableWrap');
   const body = document.getElementById('fileTableBody');
-  if (!files.length) { wrap.style.display = 'none'; return; }
+  if (!files.length) {
+    wrap.style.display = 'block';
+    wrap.innerHTML = `
+      <div class="empty-state">
+        <svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M5 9h24v18a2 2 0 01-2 2H7a2 2 0 01-2-2V9z"/><path d="M5 9l3.5-5h17L29 9"/><path d="M12 17h10M12 21h6"/></svg>
+        <div class="empty-state-title">No PDFs in the source folder</div>
+        <div class="empty-state-sub">Drop a few files into your inbox folder, then scan again.</div>
+      </div>`;
+    return;
+  }
+  // Rebuild table markup in case an empty state previously replaced it
+  if (!document.getElementById('fileTableBody')) {
+    wrap.innerHTML = `
+      <div class="file-table-scroll">
+        <table class="file-table">
+          <thead><tr><th>File</th><th>Size</th><th>Destination</th><th>Status</th></tr></thead>
+          <tbody id="fileTableBody"></tbody>
+        </table>
+      </div>`;
+  }
   wrap.style.display = 'block';
-  body.innerHTML = files.map(f => `
+  document.getElementById('fileTableBody').innerHTML = files.map(f => `
     <tr id="row-${escHtml(f.name)}">
-      <td class="file-name">${escHtml(f.name)}</td>
+      <td class="file-name" title="${escHtml(f.name)}">${escHtml(f.name)}</td>
       <td class="file-size">${fmt(f.size)}</td>
-      <td id="dest-${escHtml(f.name)}" style="color:var(--muted);font-family:var(--font-mono);font-size:12px">—</td>
+      <td class="file-dest" id="dest-${escHtml(f.name)}" title="">—</td>
       <td><span class="file-status-badge badge-pending" id="badge-${escHtml(f.name)}">Pending</span></td>
     </tr>`).join('');
 }
@@ -320,7 +420,7 @@ async function startRun() {
         badge.className = 'file-status-badge ' + (d.status === 'ok' ? 'badge-ok' : 'badge-error');
         badge.textContent = d.status === 'ok' ? 'Done' : 'Error';
       }
-      if (dest && d.dest) dest.textContent = d.dest;
+      if (dest && d.dest) { dest.textContent = d.dest; dest.title = d.dest; }
 
       if (d.status === 'ok') sorted++; else errors++;
       document.getElementById('statSorted').textContent  = sorted;
@@ -367,6 +467,7 @@ async function loadSettings() {
     document.getElementById('cfgLogLevel').value    = d.log_level    || 'INFO';
     document.getElementById('cfgAutoWatcher').checked = !!d.auto_watcher;
     document.getElementById('cfgSkipDupes').checked   = d.skip_dupes !== false;
+    document.getElementById('cfgAutoMkdir').checked   = d.auto_mkdir !== false;
   } catch { toast('Could not load config — is api.py running?', 'err'); }
 }
 async function saveSettings() {
@@ -378,14 +479,22 @@ async function saveSettings() {
     log_level:    document.getElementById('cfgLogLevel').value,
     auto_watcher: document.getElementById('cfgAutoWatcher').checked,
     skip_dupes:   document.getElementById('cfgSkipDupes').checked,
+    auto_mkdir:   document.getElementById('cfgAutoMkdir').checked,
   };
   try {
     await fetch(API + '/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(cfg) });
     toast('Settings saved!', 'ok');
-    // Also update organise tab
+    // Keep the Organise tab's Step 1–3 fields in sync with what was just saved,
+    // instead of only updating folders + token (file action/log level/toggles
+    // used to silently fall out of sync until the next full page reload).
     if (cfg.watch_dir)    { document.getElementById('srcManual').value = cfg.watch_dir;  document.getElementById('srcPath').textContent = cfg.watch_dir;  document.getElementById('srcPath').classList.remove('empty'); }
     if (cfg.output_dir)   { document.getElementById('dstManual').value = cfg.output_dir; document.getElementById('dstPath').textContent = cfg.output_dir; document.getElementById('dstPath').classList.remove('empty'); }
     if (cfg.github_token) { document.getElementById('tokenInput').value = cfg.github_token; markTokenStep(); }
+    document.getElementById('fileAction').value = cfg.file_action;
+    document.getElementById('logLevel').value   = cfg.log_level;
+    document.getElementById('skipDupes').checked = cfg.skip_dupes;
+    document.getElementById('autoMkdir').checked = cfg.auto_mkdir;
+    markStep3();
     checkStep1();
   } catch { toast('Save failed — is api.py running?', 'err'); }
 }
@@ -399,9 +508,9 @@ async function fetchLog() {
     const el = document.getElementById('logFull');
     el.innerHTML = d.lines.map(l => {
       let cls = '';
-      if (l.includes('[ERROR]'))   cls = 'log-err';
-      else if (l.includes('[WARNING]')) cls = 'log-warn';
-      else if (l.includes('[INFO]'))    cls = 'log-ok';
+      if (/\[ERROR\s*\]/.test(l))    cls = 'log-err';
+      else if (/\[WARNING\s*\]/.test(l)) cls = 'log-warn';
+      else if (/\[INFO\s*\]/.test(l))    cls = 'log-ok';
       return `<div class="${cls}">${escHtml(l)}</div>`;
     }).join('') || '<span class="log-dim">Log is empty.</span>';
     el.scrollTop = el.scrollHeight;
@@ -429,14 +538,29 @@ function toggleAutoRefresh() {
     if (d.github_token) { document.getElementById('tokenInput').value = d.github_token; markTokenStep(); }
     if (d.file_action) document.getElementById('fileAction').value = d.file_action;
     if (d.log_level)   document.getElementById('logLevel').value   = d.log_level;
-    document.getElementById('autoWatcher').checked = !!d.auto_watcher;
     document.getElementById('skipDupes').checked   = d.skip_dupes !== false;
     document.getElementById('autoMkdir').checked   = d.auto_mkdir !== false;
     checkStep1();
+    markStep3();
 
     const sr = await fetch(API + '/status');
     const sd = await sr.json();
-    if (sd.watcher_active) updateWatcherBadge(true);
+    if (sd.watcher_active) {
+      // Backend watcher is already running (e.g. survived a page refresh) —
+      // just reflect that state, don't start a second one.
+      document.getElementById('autoWatcher').checked = true;
+      updateWatcherBadge(true);
+    } else if (d.auto_watcher) {
+      // Saved preference says the watcher should be on, but the backend
+      // process was restarted and it isn't actually running. Previously the
+      // checkbox was set to ON here without starting anything, so the toggle
+      // showed "on" while the badge said "Watcher off" (see screenshot).
+      // Start it for real instead, so the UI doesn't lie about its state.
+      document.getElementById('autoWatcher').checked = true;
+      toggleWatcher(true);
+    } else {
+      document.getElementById('autoWatcher').checked = false;
+    }
     if (sd.pdf_count > 0) {
       document.getElementById('statTotal').textContent   = sd.pdf_count;
       document.getElementById('statPending').textContent = sd.pdf_count;
