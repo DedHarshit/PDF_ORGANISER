@@ -41,14 +41,15 @@ function toggleTheme() {
 applyTheme(getStoredTheme() === 'light' ? 'light' : 'dark');
 
 // ── Tab switching ──────────────────────────────────────────────────────
+// Only one tab (Organise) remains — Settings and Logs were removed since
+// every field they exposed already lives in Step 1–3 here, and kept falling
+// out of sync with it). This is now a no-op kept
+// only so the markup's onclick wiring doesn't need touching elsewhere.
 function switchTab(name) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
-  const tabs = ['organise','settings','logs'];
-  document.querySelectorAll('.nav-tab')[tabs.indexOf(name)].classList.add('active');
-  if (name === 'settings') loadSettings();
-  if (name === 'logs') fetchLog();
+  document.querySelector('.nav-tab').classList.add('active');
 }
 
 // ── Toast ──────────────────────────────────────────────────────────────
@@ -115,10 +116,6 @@ function checkStep1() {
 // ── Token ─────────────────────────────────────────────────────────────
 function toggleTokenVis() {
   const inp = document.getElementById('tokenInput');
-  inp.type = inp.type === 'password' ? 'text' : 'password';
-}
-function toggleCfgTokenVis() {
-  const inp = document.getElementById('cfgToken');
   inp.type = inp.type === 'password' ? 'text' : 'password';
 }
 function markTokenStep() {
@@ -332,7 +329,7 @@ function renderFileTable(files) {
       </div>`;
     return;
   }
-  // Rebuild table markup in case an empty state previously replaced it
+  
   if (!document.getElementById('fileTableBody')) {
     wrap.innerHTML = `
       <div class="file-table-scroll">
@@ -453,79 +450,6 @@ async function startRun() {
     log('Connection to backend lost.', 'log-err');
     toast('Backend connection lost', 'err');
   };
-}
-
-// ── Settings ───────────────────────────────────────────────────────────
-async function loadSettings() {
-  try {
-    const r = await fetch(API + '/config');
-    const d = await r.json();
-    document.getElementById('cfgSrc').value         = d.watch_dir  || '';
-    document.getElementById('cfgDst').value         = d.output_dir || '';
-    document.getElementById('cfgToken').value       = d.github_token || '';
-    document.getElementById('cfgAction').value      = d.file_action  || 'move';
-    document.getElementById('cfgLogLevel').value    = d.log_level    || 'INFO';
-    document.getElementById('cfgAutoWatcher').checked = !!d.auto_watcher;
-    document.getElementById('cfgSkipDupes').checked   = d.skip_dupes !== false;
-    document.getElementById('cfgAutoMkdir').checked   = d.auto_mkdir !== false;
-  } catch { toast('Could not load config — is api.py running?', 'err'); }
-}
-async function saveSettings() {
-  const cfg = {
-    watch_dir:    document.getElementById('cfgSrc').value.trim(),
-    output_dir:   document.getElementById('cfgDst').value.trim(),
-    github_token: document.getElementById('cfgToken').value.trim(),
-    file_action:  document.getElementById('cfgAction').value,
-    log_level:    document.getElementById('cfgLogLevel').value,
-    auto_watcher: document.getElementById('cfgAutoWatcher').checked,
-    skip_dupes:   document.getElementById('cfgSkipDupes').checked,
-    auto_mkdir:   document.getElementById('cfgAutoMkdir').checked,
-  };
-  try {
-    await fetch(API + '/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(cfg) });
-    toast('Settings saved!', 'ok');
-    // Keep the Organise tab's Step 1–3 fields in sync with what was just saved,
-    // instead of only updating folders + token (file action/log level/toggles
-    // used to silently fall out of sync until the next full page reload).
-    if (cfg.watch_dir)    { document.getElementById('srcManual').value = cfg.watch_dir;  document.getElementById('srcPath').textContent = cfg.watch_dir;  document.getElementById('srcPath').classList.remove('empty'); }
-    if (cfg.output_dir)   { document.getElementById('dstManual').value = cfg.output_dir; document.getElementById('dstPath').textContent = cfg.output_dir; document.getElementById('dstPath').classList.remove('empty'); }
-    if (cfg.github_token) { document.getElementById('tokenInput').value = cfg.github_token; markTokenStep(); }
-    document.getElementById('fileAction').value = cfg.file_action;
-    document.getElementById('logLevel').value   = cfg.log_level;
-    document.getElementById('skipDupes').checked = cfg.skip_dupes;
-    document.getElementById('autoMkdir').checked = cfg.auto_mkdir;
-    markStep3();
-    checkStep1();
-  } catch { toast('Save failed — is api.py running?', 'err'); }
-}
-
-// ── Log tab ────────────────────────────────────────────────────────────
-let _autoRefresh = null;
-async function fetchLog() {
-  try {
-    const r = await fetch(API + '/log?lines=200');
-    const d = await r.json();
-    const el = document.getElementById('logFull');
-    el.innerHTML = d.lines.map(l => {
-      let cls = '';
-      if (/\[ERROR\s*\]/.test(l))    cls = 'log-err';
-      else if (/\[WARNING\s*\]/.test(l)) cls = 'log-warn';
-      else if (/\[INFO\s*\]/.test(l))    cls = 'log-ok';
-      return `<div class="${cls}">${escHtml(l)}</div>`;
-    }).join('') || '<span class="log-dim">Log is empty.</span>';
-    el.scrollTop = el.scrollHeight;
-  } catch { document.getElementById('logFull').innerHTML = '<span class="log-err">Cannot reach api.py</span>'; }
-}
-function toggleAutoRefresh() {
-  const lbl = document.getElementById('autoRefreshLabel');
-  if (_autoRefresh) {
-    clearInterval(_autoRefresh); _autoRefresh = null;
-    lbl.textContent = '▶ Auto-refresh';
-  } else {
-    _autoRefresh = setInterval(fetchLog, 3000);
-    lbl.textContent = '⏸ Stop refresh';
-    fetchLog();
-  }
 }
 
 // ── Init: load config into form ────────────────────────────────────────

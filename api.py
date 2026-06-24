@@ -19,7 +19,6 @@ load_dotenv()
 
 BASE_DIR    = Path(__file__).parent
 CONFIG_FILE = BASE_DIR / ".gui_config.json"
-LOG_FILE    = BASE_DIR / "pdf_organiser.log"
 ENV_FILE    = BASE_DIR / ".env"
 
 app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path="")
@@ -364,15 +363,6 @@ def watcher_events():
 def watcher_stop():
     _watcher_stop.set()
     return jsonify({"ok": True, "message": "Watcher stopping..."})
-
-@app.route("/api/log")
-def get_log():
-    n = int(request.args.get("lines", 100))
-    if not LOG_FILE.exists():
-        return jsonify({"lines": []})
-    with open(LOG_FILE, encoding="utf-8", errors="replace") as f:
-        lines = f.readlines()
-    return jsonify({"lines": [l.rstrip() for l in lines[-n:]]})
 
 if __name__ == "__main__":
     print("\n PDF Organiser API  ->  http://localhost:5000\n")
